@@ -79,6 +79,11 @@ Deno.serve(async request=>{
       const {data,error}=await db.from('posts').select('id,channel_id,content,status,created_at').eq('owner_id',owner).order('created_at',{ascending:false}).limit(50);
       if(error)throw error;return reply(data);
     }
+    if(body.action==='edit_post') {
+      if(typeof body.content!=='string'||!body.content.trim()||body.content.length>4000)return reply({error:'Текст должен содержать от 1 до 4000 символов'},400);
+      const {data,error}=await db.from('posts').update({content:body.content}).eq('id',body.post_id).eq('owner_id',owner).eq('status','draft').select('id').maybeSingle();
+      if(error)throw error;if(!data)return reply({error:'Черновик уже изменён или отправлен'},409);return reply({ok:true});
+    }
     if(body.action==='publish') {
       const {data:post}=await db.from('posts').select('*').eq('id',body.post_id).eq('owner_id',owner).single();
       if(!post||post.status!=='draft')return reply({error:'Черновик недоступен для публикации'},409);

@@ -26,3 +26,21 @@ const studioButton=document.createElement('button');studioButton.textContent='�
 async function refreshStudio(){try{const [channels,posts]=await Promise.all([api('channels'),api('posts')]);const select=document.querySelector('#compose select');select.replaceChildren(...channels.map(channel=>{const option=document.createElement('option');option.value=channel.id;option.textContent=channel.title;return option;}));const labels={draft:'Черновик',published:'Опубликован',publishing:'Отправляется',uncertain:'Проверьте канал — результат неизвестен',failed:'Ошибка',scheduled:'В расписании'};document.querySelector('#drafts').replaceChildren(...posts.map(post=>{const card=document.createElement('article');card.className='card';const label=document.createElement('h3');label.textContent=labels[post.status]||post.status;const text=document.createElement('p');text.style.whiteSpace='pre-wrap';text.textContent=post.content;card.append(label,text);if(post.status==='draft'){const button=document.createElement('button');button.className='primary';button.textContent='Опубликовать';button.onclick=async()=>{if(!confirm('Опубликовать этот пост в канале?'))return;button.disabled=true;try{await api('publish',{post_id:post.id});status('Пост опубликован');}catch(error){status(error.message);}finally{await refreshStudio();}};card.append(button);}return card;}));}catch(error){status(error.message);}}
 studioButton.onclick=()=>{document.querySelectorAll('main section').forEach(section=>section.hidden=section!==studio);document.querySelectorAll('nav button').forEach(button=>button.classList.toggle('active',button===studioButton));refreshStudio();};
 document.querySelector('#compose').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;const button=form.querySelector('button');button.disabled=true;button.textContent='Создаём…';try{await api('generate',Object.fromEntries(new FormData(form)));form.elements.brief.value='';await refreshStudio();status('Черновик готов — проверьте его перед публикацией');}catch(error){status(error.message);}finally{button.disabled=false;button.textContent='Создать черновик';}};
+const draftObserver=new MutationObserver(()=>{
+ document.querySelectorAll('#drafts .card').forEach(card=>{
+  if(card.querySelector('h3')?.textContent!=='Черновик'||card.dataset.editable)return;
+  card.dataset.editable='true';
+  const button=document.createElement('button');button.textContent='Редактировать';button.style.marginLeft='12px';
+  button.onclick=async()=>{
+   const text=card.querySelector('p');const content=prompt('Текст публикации (до 4000 символов)',text.textContent);
+   if(content===null)return;
+   button.disabled=true;
+   try{
+    const posts=await api('posts');const matches=posts.filter(post=>post.status==='draft'&&post.content===text.textContent);
+    if(matches.length!==1)throw Error('Не удалось однозначно выбрать черновик. Обновите список.');
+    await api('edit_post',{post_id:matches[0].id,content});await refreshStudio();status('Изменения сохранены');
+   }catch(error){status(error.message);}finally{button.disabled=false;}
+  };card.append(button);
+ });
+});
+draftObserver.observe(document.querySelector('#drafts'),{childList:true});
