@@ -1,3 +1,5 @@
 project_id = "samo"
 [functions.api]
 verify_jwt = false
+[functions.bot]
+verify_jwt = false
