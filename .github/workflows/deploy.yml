@@ -44,3 +44,6 @@ jobs:
           path: dist
       - uses: actions/deploy-pages@v4
         id: pages
+      - run: node scripts/configure-bot.mjs
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
