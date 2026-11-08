@@ -75,6 +75,28 @@ Deno.serve(async request=>{
       const {data,error}=await db.from('posts').insert({owner_id:owner,channel_id:channel.id,content:content.slice(0,4000),status:'draft'}).select('id,content,status').single();
       if(error)throw error;return reply(data);
     }
+    if(body.action==='posts') {
+      const {data,error}=await db.from('posts').select('id,channel_id,content,status,created_at').eq('owner_id',owner).order('created_at',{ascending:false}).limit(50);
+      if(error)throw error;return reply(data);
+    }
+    if(body.action==='publish') {
+      const {data:post}=await db.from('posts').select('*').eq('id',body.post_id).eq('owner_id',owner).single();
+      if(!post||post.status!=='draft')return reply({error:'Черновик недоступен для публикации'},409);
+      const {data:channel}=await db.from('channels').select('*').eq('id',post.channel_id).eq('owner_id',owner).single();
+      if(!channel)return reply({error:'Канал не найден'},404);
+      const member=await telegram('getChatMember',{chat_id:channel.telegram_chat_id,user_id:owner});
+      if(!['creator','administrator'].includes(member.status))return reply({error:'Нет прав на канал'},403);
+      const {data:claimed,error:claimError}=await db.from('posts').update({status:'publishing'}).eq('id',post.id).eq('owner_id',owner).eq('status','draft').select('id').maybeSingle();
+      if(claimError)throw claimError;if(!claimed)return reply({error:'Публикация уже выполняется'},409);
+      try {
+        const result=await telegram('sendMessage',{chat_id:channel.telegram_chat_id,text:post.content});
+        const {error}=await db.from('posts').update({status:'published',telegram_message_id:result.message_id}).eq('id',post.id).eq('owner_id',owner);
+        if(error)throw error;return reply({ok:true});
+      }catch{
+        await db.from('posts').update({status:'uncertain'}).eq('id',post.id).eq('owner_id',owner);
+        return reply({error:'Результат отправки неизвестен. Проверьте канал перед повторной публикацией.'},502);
+      }
+    }
     if(body.action==='add_channel') {
       if(!['news','product','personal','character'].includes(body.kind)) return reply({error:'Invalid type'},400);
       const chat=await telegram('getChat',{chat_id:String(body.chat).trim()});
