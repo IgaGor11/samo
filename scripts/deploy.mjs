@@ -6,7 +6,8 @@ if(!access||!bot) throw Error('Required GitHub Secrets: SUPABASE_ACCESS_TOKEN, T
 async function management(path,body){
  const response=await fetch(`https://api.supabase.com/v1/projects/${ref}/${path}`,{method:'POST',headers:{Authorization:`Bearer ${access}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
  if(!response.ok)throw Error(`Supabase ${path}: HTTP ${response.status}`);
- return response.json();
+ const text=await response.text();
+ return text ? JSON.parse(text) : null;
 }
 await management('secrets',[{name:'TELEGRAM_BOT_TOKEN',value:bot}]);
 const query=await readFile('supabase/migrations/202611080001_initial.sql','utf8');
