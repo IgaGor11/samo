@@ -56,6 +56,25 @@ Deno.serve(async request=>{
       const {data,error}=await db.from('channels').select('id,title,kind,enabled,moderation,timezone,settings').eq('owner_id',owner);
       if(error) throw error; return reply(data);
     }
+    if(body.action==='generate') {
+      if(typeof body.brief!=='string'||!body.brief.trim()||body.brief.length>8000)return reply({error:'Опишите идею поста (до 8000 символов)'},400);
+      const {data:channel}=await db.from('channels').select('*').eq('id',body.channel_id).eq('owner_id',owner).single();
+      if(!channel)return reply({error:'Канал не найден'},404);
+      const {data:credential}=await db.from('ai_credentials').select('*').eq('owner_id',owner).eq('purpose','text').single();
+      if(!credential)return reply({error:'Сначала подключите текстовую модель'},400);
+      const bytes=Uint8Array.from(atob(credential.encrypted_secret),c=>c.charCodeAt(0));
+      const rawKey=Uint8Array.from(atob(Deno.env.get('AI_ENCRYPTION_KEY')!),c=>c.charCodeAt(0));
+      const key=await crypto.subtle.importKey('raw',rawKey,'AES-GCM',false,['decrypt']);
+      const apiKey=new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes.slice(0,12),additionalData:encoder.encode(String(owner))},key,bytes.slice(12)));
+      const endpoints:Record<string,string>={groq:'https://api.groq.com/openai/v1/chat/completions',openai:'https://api.openai.com/v1/chat/completions',deepseek:'https://api.deepseek.com/chat/completions'};
+      const endpoint=endpoints[credential.provider];if(!endpoint)throw Error('Provider unavailable');
+      const response=await fetch(endpoint,{method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:credential.model,max_tokens:1000,messages:[{role:'system',content:'Напиши русский пост для Telegram до 3500 символов без HTML и Markdown. Не выдумывай факты о реальных людях или продукте. Для вымышленного персонажа допустима художественная история с пометкой «Вымышленная история». Настройки канала: '+JSON.stringify({kind:channel.kind,...channel.settings})},{role:'user',content:body.brief}]}),signal:AbortSignal.timeout(45000)});
+      if(!response.ok)return reply({error:'AI отклонил запрос. Проверьте ключ, модель и баланс.'},502);
+      const result=await response.json();const content=result.choices?.[0]?.message?.content;
+      if(typeof content!=='string'||!content.trim())throw Error('Empty generation');
+      const {data,error}=await db.from('posts').insert({owner_id:owner,channel_id:channel.id,content:content.slice(0,4000),status:'draft'}).select('id,content,status').single();
+      if(error)throw error;return reply(data);
+    }
     if(body.action==='add_channel') {
       if(!['news','product','personal','character'].includes(body.kind)) return reply({error:'Invalid type'},400);
       const chat=await telegram('getChat',{chat_id:String(body.chat).trim()});
