@@ -38,6 +38,20 @@ Deno.serve(async request=>{
     let owner: number;
     try {owner=await identity(body.initData);} catch {return reply({error:'Откройте приложение заново через Telegram.'},401);}
     const account=await db.from('accounts').upsert({telegram_id:owner}); if(account.error) throw Error('Database unavailable');
+    if(body.action==='save_ai') {
+      if(!['groq','openai','deepseek'].includes(body.provider)||typeof body.key!=='string'||body.key.length<10||body.key.length>1024||typeof body.model!=='string'||body.model.length>150) return reply({error:'Проверьте провайдера, модель и ключ'},400);
+      const rawKey=Uint8Array.from(atob(Deno.env.get('AI_ENCRYPTION_KEY')!),c=>c.charCodeAt(0));
+      const key=await crypto.subtle.importKey('raw',rawKey,'AES-GCM',false,['encrypt']);
+      const iv=crypto.getRandomValues(new Uint8Array(12));
+      const encrypted=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:encoder.encode(String(owner))},key,encoder.encode(body.key)));
+      const encrypted_secret=btoa(String.fromCharCode(...iv,...encrypted));
+      const {error}=await db.from('ai_credentials').upsert({owner_id:owner,purpose:'text',provider:body.provider,model:body.model,encrypted_secret},{onConflict:'owner_id,purpose'});
+      if(error)throw error;return reply({ok:true});
+    }
+    if(body.action==='ai_status') {
+      const {data,error}=await db.from('ai_credentials').select('purpose,provider,model').eq('owner_id',owner);
+      if(error)throw error;return reply(data);
+    }
     if(body.action==='channels') {
       const {data,error}=await db.from('channels').select('id,title,kind,enabled,moderation,timezone,settings').eq('owner_id',owner);
       if(error) throw error; return reply(data);

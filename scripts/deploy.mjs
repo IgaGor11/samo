@@ -1,4 +1,5 @@
 import {readFile} from 'node:fs/promises';
+import {randomBytes} from 'node:crypto';
 const ref='fpgdsosfwsrfxebvkgdz';
 const access=process.env.SUPABASE_ACCESS_TOKEN;
 const bot=process.env.TELEGRAM_BOT_TOKEN;
@@ -10,6 +11,10 @@ async function management(path,body){
  return text ? JSON.parse(text) : null;
 }
 await management('secrets',[{name:'TELEGRAM_BOT_TOKEN',value:bot}]);
+const secretResponse=await fetch(`https://api.supabase.com/v1/projects/${ref}/secrets`,{headers:{Authorization:`Bearer ${access}`}});
+if(!secretResponse.ok)throw Error('Cannot inspect secret names');
+const secretNames=await secretResponse.json();
+if(!secretNames.some(item=>item.name==='AI_ENCRYPTION_KEY'))await management('secrets',[{name:'AI_ENCRYPTION_KEY',value:randomBytes(32).toString('base64')}]);
 const query=await readFile('supabase/migrations/202611080001_initial.sql','utf8');
 const existing=await management('database/query',{query:"select to_regclass('public.accounts') as existing"});
 if(!existing[0]?.existing)await management('database/query',{query:`begin; ${query} commit;`});
