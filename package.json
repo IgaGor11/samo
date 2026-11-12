@@ -1,1 +1,1 @@
-{"name":"samo","private":true,"type":"module","scripts":{"dev":"vite --host 127.0.0.1","build":"vite build"},"devDependencies":{"vite":"^6.4.1"}}
+{"name":"samo","private":true,"type":"module","scripts":{"dev":"vite --host 127.0.0.1","build":"vite build"},"devDependencies":{"@playwright/test":"^1.65.0","prettier":"^3.10.1","vite":"^6.4.1"}}

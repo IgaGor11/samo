@@ -23,6 +23,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: node --test tests/core.test.mjs
       - run: node scripts/deploy.mjs
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -33,6 +34,11 @@ jobs:
       - run: supabase functions deploy --project-ref fpgdsosfwsrfxebvkgdz --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          DENO_NO_PACKAGE_JSON: '1'
+      - run: node scripts/smoke-live.mjs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       - run: npm run build -- --base=/samo/
         env:
           VITE_API_URL: https://fpgdsosfwsrfxebvkgdz.supabase.co/functions/v1/api
