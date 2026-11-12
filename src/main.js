@@ -44,3 +44,10 @@ const draftObserver=new MutationObserver(()=>{
  });
 });
 draftObserver.observe(document.querySelector('#drafts'),{childList:true});
+const scheduleForm=document.createElement('form');scheduleForm.className='card';
+scheduleForm.innerHTML='<h2>Отложенная публикация</h2><button type="button" id="refresh-schedule">Обновить список черновиков</button><label>Публикация<select name="post_id" required></select></label><label>Дата и время на вашем устройстве<input type="datetime-local" name="date" required></label><p class="hint">Проверка очереди примерно каждые 15 минут. Возможны задержки GitHub Actions.</p><button class="primary">Запланировать</button><button type="button" id="cancel-schedule">Вернуть в черновики</button><p role="status" id="schedule-status"></p>';
+studio.append(scheduleForm);
+async function scheduleList(){const posts=await api('posts');scheduleForm.elements.post_id.replaceChildren(...posts.filter(p=>['draft','scheduled'].includes(p.status)).map(p=>{const option=document.createElement('option');option.value=p.id;option.textContent=(p.status==='scheduled'?'В расписании · ':'Черновик · ')+p.content.slice(0,70);return option;}));}
+document.querySelector('#refresh-schedule').onclick=()=>scheduleList().catch(error=>status(error.message));
+scheduleForm.onsubmit=async event=>{event.preventDefault();const button=scheduleForm.querySelector('.primary');button.disabled=true;try{await api('schedule_post',{post_id:scheduleForm.elements.post_id.value,scheduled_at:new Date(scheduleForm.elements.date.value).toISOString()});document.querySelector('#schedule-status').textContent='Публикация запланирована';await Promise.all([refreshStudio(),scheduleList()]);}catch(error){document.querySelector('#schedule-status').textContent=error.message;}finally{button.disabled=false;}};
+document.querySelector('#cancel-schedule').onclick=async()=>{try{await api('cancel_schedule',{post_id:scheduleForm.elements.post_id.value});await Promise.all([refreshStudio(),scheduleList()]);document.querySelector('#schedule-status').textContent='Публикация возвращена в черновики';}catch(error){document.querySelector('#schedule-status').textContent=error.message;}};

@@ -84,6 +84,12 @@ Deno.serve(async request=>{
       const {data,error}=await db.from('posts').update({content:body.content}).eq('id',body.post_id).eq('owner_id',owner).eq('status','draft').select('id').maybeSingle();
       if(error)throw error;if(!data)return reply({error:'Черновик уже изменён или отправлен'},409);return reply({ok:true});
     }
+    if(body.action==='schedule_post'||body.action==='cancel_schedule') {
+      const schedule=body.action==='schedule_post';const date=new Date(body.scheduled_at);
+      if(schedule&&(!Number.isFinite(date.getTime())||date.getTime()<Date.now()+60000))return reply({error:'Выберите время минимум через минуту'},400);
+      const {data,error}=await db.from('posts').update({status:schedule?'scheduled':'draft',scheduled_at:schedule?date.toISOString():null}).eq('id',body.post_id).eq('owner_id',owner).eq('status',schedule?'draft':'scheduled').select('id').maybeSingle();
+      if(error)throw error;if(!data)return reply({error:'Статус публикации уже изменился'},409);return reply({ok:true});
+    }
     if(body.action==='publish') {
       const {data:post}=await db.from('posts').select('*').eq('id',body.post_id).eq('owner_id',owner).single();
       if(!post||post.status!=='draft')return reply({error:'Черновик недоступен для публикации'},409);
